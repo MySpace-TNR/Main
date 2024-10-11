@@ -1,6 +1,7 @@
 name: Update Issue Labels Based on Status
 
 on:
+  workflow_dispatch:  # Permite execução manual
   project_card:
     types: [moved]
 
