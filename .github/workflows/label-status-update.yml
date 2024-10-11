@@ -22,18 +22,15 @@ jobs:
             In Progress
             Done
 
-      # Obter o status do cartão de projeto (Project Board)
-      - name: Get project card status
-        run: |
-          STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }} " \
-            https://api.github.com/projects/columns/${{ github.event.project_card.column_id }} | jq -r '.name')
-          echo "Status atual: $STATUS"
-          echo "::set-output name=status::$STATUS"
-        id: status_output
-
-      # Adicionar nova label com base no status do cartão
-      - name: Add new label based on status
+      # Adicionar nova label com base no status
+      - name: Add new label
         uses: actions-ecosystem/action-add-labels@v1.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: ${{ steps.status_output.outputs.status }}
+          labels: 'In Progress'  # Aqui você pode alterar para o status que desejar
+
+      # Obter a última tag do repositório (opcional)
+      - name: Get latest tag
+        uses: actions-ecosystem/action-get-latest-tag@v1.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
