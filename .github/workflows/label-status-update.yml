@@ -10,18 +10,30 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       # Remover labels anteriores (Todo, In Progress, Done)
-      - name: Actions Ecosystem Remove Labels
+      - name: Remove previous labels
         uses: actions-ecosystem/action-remove-labels@v1.3.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: 'Todo,In Progress,Done' # Remover todas as labels de status anteriores
+          labels: |
+            Todo
+            In Progress
+            Done
 
-      # Adicionar nova label baseada no status atual
-      - name: Actions Ecosystem Add Labels
+      # Obter o status do cartão de projeto (Project Board)
+      - name: Get project card status
+        run: |
+          STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }} " \
+            https://api.github.com/projects/columns/${{ github.event.project_card.column_id }} | jq -r '.name')
+          echo "Status atual: $STATUS"
+          echo "::set-output name=status::$STATUS"
+        id: status_output
+
+      # Adicionar nova label com base no status do cartão
+      - name: Add new label based on status
         uses: actions-ecosystem/action-add-labels@v1.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: 'In Progress'  # Exemplo: adicionar a label "In Progress" (modifique conforme o status)
+          labels: ${{ steps.status_output.outputs.status }}
