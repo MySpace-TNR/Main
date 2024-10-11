@@ -1,8 +1,19 @@
-name: Update Labels Based on Project Card Movement
+name: Update Labels Based on Issue Status
 
 on:
+  issues:
+    types:
+      - opened
+      - edited
+      - closed
+      - reopened
+
   project_card:
-    types: [moved]
+    types:
+      - created
+      - moved
+      - converted
+      - removed
 
 jobs:
   update_labels:
@@ -16,19 +27,23 @@ jobs:
       - name: Get issue number from project card
         id: get_issue_number
         run: |
-          ISSUE_NUMBER=$(echo "${{ github.event.project_card.content_url }}" | grep -oE '[0-9]+$')
+          if [[ "${{ github.event_name }}" == "project_card" ]]; then
+            ISSUE_NUMBER=$(echo "${{ github.event.project_card.content_url }}" | grep -oE '[0-9]+$')
+          else
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          fi
           echo "Número da Issue: $ISSUE_NUMBER"
           echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_ENV
 
-      # Obter o status da coluna para onde a issue foi movida
-      - name: Get project card status
+      # Obter o status da issue (considerando que o status está definido em uma label)
+      - name: Get current status label
         id: get_status
         run: |
-          STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/projects/columns/${{ github.event.project_card.column_id }}" | \
-            jq -r '.name')
-          echo "Status atual: $STATUS"
-          echo "status=$STATUS" >> $GITHUB_ENV
+          CURRENT_STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ env.issue_number }}" | \
+            jq -r '.labels[] | select(.name | test("Todo|In Progress|Done")) | .name // empty')
+          echo "Current status: $CURRENT_STATUS"
+          echo "status=$CURRENT_STATUS" >> $GITHUB_ENV
 
       # Remover labels de status anteriores
       - name: Remove previous status labels
