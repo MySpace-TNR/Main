@@ -1,0 +1,111 @@
+name: TESTE 1
+
+on:
+  issues:
+    types: [edited, labeled, opened]  # Captura edições, inclusão de labels e abertura de issues
+  project_card:
+    types: [moved]  # Captura movimentação de cards no Kanban
+
+jobs:
+  update-label:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Apply label based on issue status or Kanban movement
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const statusLabels = ['Todo', 'In Progress', 'Done'];
+
+          // Verificar se o evento é issues
+          if (context.eventName === 'issues') {
+            const issue_number = context.payload.issue.number;
+
+            // Verificar o estado atual da issue
+            const state = context.payload.issue.state;
+
+            let newStatusLabel = '';
+
+            if (state === 'open') {
+              newStatusLabel = 'Todo';
+            } else if (state === 'closed') {
+              newStatusLabel = 'Done';
+            }
+
+            if (newStatusLabel) {
+              // Atualizar a label da issue
+              const { data: currentLabels } = await github.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number
+              });
+
+              const labelsToKeep = currentLabels
+                .filter(label => !statusLabels.includes(label.name))
+                .map(label => label.name);
+
+              labelsToKeep.push(newStatusLabel);
+
+              // Atualizar as labels da issue
+              await github.issues.setLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                labels: labelsToKeep
+              });
+            }
+          }
+
+          // Verificar se o evento é project_card (movimentação no Kanban)
+          if (context.eventName === 'project_card') {
+            const contentUrl = context.payload.project_card.content_url;
+
+            // Verificar se é uma issue
+            if (contentUrl.includes('/issues/')) {
+              const issue_number = contentUrl.split('/').pop();
+
+              // Obter o estado do card (coluna do projeto)
+              const projectId = context.payload.project_card.project_id;
+              const columnId = context.payload.project_card.column_id;
+
+              // Obter o nome da coluna do Kanban
+              const { data: projectColumns } = await github.projects.listColumns({
+                project_id: projectId
+              });
+
+              const currentStatus = projectColumns.find(column => column.id === columnId).name;
+
+              let newStatusLabel = '';
+
+              if (currentStatus === 'Todo') {
+                newStatusLabel = 'Todo';
+              } else if (currentStatus === 'In Progress') {
+                newStatusLabel = 'In Progress';
+              } else if (currentStatus === 'Done') {
+                newStatusLabel = 'Done';
+              }
+
+              if (newStatusLabel) {
+                // Atualizar a label da issue
+                const { data: currentLabels } = await github.issues.listLabelsOnIssue({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number
+                });
+
+                const labelsToKeep = currentLabels
+                  .filter(label => !statusLabels.includes(label.name))
+                  .map(label => label.name);
+
+                labelsToKeep.push(newStatusLabel);
+
+                // Atualizar as labels da issue
+                await github.issues.setLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number,
+                  labels: labelsToKeep
+                });
+              }
+            }
+          }
