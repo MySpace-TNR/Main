@@ -1,43 +1,40 @@
-name: Update Status Labels 2
+name: Update Status Labels 3
 
 on:
  workflow_dispatch:  # Permite execução manual
+  issues:
+    types: [edited]  # Captura edições na issue, incluindo mudanças de status
   project_card:
-    types: [moved]
+    types: [moved]  # Captura o movimento de cards no Kanban
 
 jobs:
   update-label:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Apply label based on project card status
+    - name: Apply label based on issue status or Kanban movement
       uses: actions/github-script@v6
       with:
         script: |
           // Definir as labels de status: 'Todo', 'In Progress', 'Done'
           const statusLabels = ['Todo', 'In Progress', 'Done'];
 
-          // Obter o número da issue ou pull request a partir da URL do conteúdo do cartão do projeto
-          const contentUrl = context.payload.project_card.content_url;
+          // Verificar se estamos lidando com uma issue
+          if (context.eventName === 'issues') {
+            const issue_number = context.issue.number;
 
-          // Verificar se é uma issue ou pull request
-          if (contentUrl.includes('/issues/') || contentUrl.includes('/pulls/')) {
-            const issue_number = contentUrl.split('/').pop();
+            // Obter o status atual da issue do projeto
+            const status = context.payload.issue.state; // Aqui pegamos o status configurado no projeto
 
-            // Obter o status atual do card (supondo que o status esteja mapeado de alguma forma)
-            const projectId = context.payload.project_card.project_id;
-            const columnId = context.payload.project_card.column_id;
-            
-            // Fazer a chamada para obter os detalhes do projeto e suas colunas
-            const { data: projectColumns } = await github.projects.listColumns({
-              project_id: projectId
-            });
-
-            // Encontrar o nome do status correspondente ao column_id
-            const currentStatus = projectColumns.find(column => column.id === columnId).name;
-
-            // Verificar se o status atual corresponde a uma das labels de status
-            const newStatusLabel = statusLabels.find(label => label === currentStatus);
+            // Mapear status do projeto para a label correspondente
+            let newStatusLabel;
+            if (status === 'open') {
+              newStatusLabel = 'Todo';
+            } else if (status === 'in_progress') {
+              newStatusLabel = 'In Progress';
+            } else if (status === 'closed') {
+              newStatusLabel = 'Done';
+            }
 
             if (newStatusLabel) {
               // Buscar todas as labels atuais da issue
@@ -60,5 +57,60 @@ jobs:
                 issue_number: issue_number,
                 labels: labelsToKeep
               });
+            }
+          }
+
+          // Verificar se estamos lidando com um card de projeto (Kanban)
+          if (context.eventName === 'project_card') {
+            const contentUrl = context.payload.project_card.content_url;
+
+            // Verificar se é uma issue ou pull request
+            if (contentUrl.includes('/issues/') || contentUrl.includes('/pulls/')) {
+              const issue_number = contentUrl.split('/').pop();
+
+              // Obter o status atual do card do projeto
+              const projectId = context.payload.project_card.project_id;
+              const columnId = context.payload.project_card.column_id;
+
+              // Fazer a chamada para obter os detalhes do projeto e suas colunas
+              const { data: projectColumns } = await github.projects.listColumns({
+                project_id: projectId
+              });
+
+              // Encontrar o nome do status correspondente ao column_id
+              const currentStatus = projectColumns.find(column => column.id === columnId).name;
+
+              // Mapear o nome da coluna para as labels de status
+              let newStatusLabel;
+              if (currentStatus === 'Todo') {
+                newStatusLabel = 'Todo';
+              } else if (currentStatus === 'In Progress') {
+                newStatusLabel = 'In Progress';
+              } else if (currentStatus === 'Done') {
+                newStatusLabel = 'Done';
+              }
+
+              if (newStatusLabel) {
+                // Buscar todas as labels atuais da issue
+                const { data: currentLabels } = await github.issues.listLabelsOnIssue({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number
+                });
+
+                // Remover qualquer label de status existente (se houver)
+                const labelsToKeep = currentLabels.filter(label => !statusLabels.includes(label.name)).map(label => label.name);
+
+                // Adicionar a nova label de status
+                labelsToKeep.push(newStatusLabel);
+
+                // Atualizar as labels da issue
+                await github.issues.setLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue_number,
+                  labels: labelsToKeep
+                });
+              }
             }
           }
