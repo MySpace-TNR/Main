@@ -1,0 +1,40 @@
+name: Update Issue Labels Based on Project Board Status
+
+on:
+  workflow_dispatch:  # Permite execução manual
+  project_card:
+    types: [moved]  # Dispara quando uma issue é movida no board
+
+jobs:
+  update_labels:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      # Obter o status da coluna para onde a issue foi movida
+      - name: Get project card status
+        run: |
+          STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }} " \
+            https://api.github.com/projects/columns/${{ github.event.project_card.column_id }} | jq -r '.name')
+          echo "Status atual: $STATUS"
+          echo "::set-output name=status::$STATUS"
+        id: status_output
+
+      # Remover labels anteriores (Todo, In Progress, Done)
+      - name: Remove previous status labels
+        uses: actions-ecosystem/action-remove-labels@v1.3.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: |
+            Todo
+            In Progress
+            Done
+
+      # Adicionar a nova label com base no status da coluna
+      - name: Add new label based on status
+        uses: actions-ecosystem/action-add-labels@v1.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ${{ steps.status_output.outputs.status }}
