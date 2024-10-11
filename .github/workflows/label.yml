@@ -1,68 +1,36 @@
-name: Update Labels Based on Issue Status
+name: Update Status Labels
 
 on:
-  issues:
-    types:
-      - opened
-      - edited
-      - closed
-      - reopened
-
   project_card:
-    types:
-      - created
-      - moved
-      - converted
-      - removed
-
-  workflow_dispatch:  # Para teste manual
+    types: [moved]
 
 jobs:
-  update_labels:
+  update-label:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v2
+    - name: Apply label based on project card movement
+      uses: actions/github-script@v3
+      with:
+        script: |
+          // Definir as labels de status: 'Todo', 'In Progress', 'Done'
+          const statusLabels = ['Todo', 'In Progress', 'Done'];
+          
+          // Obter o nome da coluna do Kanban para onde o card foi movido
+          const columnName = context.payload.project_card.column_name;
 
-      # Obter o número da issue a partir da URL do cartão de projeto
-      - name: Get issue number from project card
-        id: get_issue_number
-        run: |
-          if [[ "${{ github.event_name }}" == "project_card" ]]; then
-            ISSUE_NUMBER=$(echo "${{ github.event.project_card.content_url }}" | grep -oE '[0-9]+$')
-          else
-            ISSUE_NUMBER="${{ github.event.issue.number }}"
-          fi
-          echo "Número da Issue: $ISSUE_NUMBER"
-          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_ENV
+          // Verificar se o nome da coluna corresponde a uma das labels de status
+          const newStatusLabel = statusLabels.find(label => label === columnName);
 
-      # Obter o status da issue (considerando que o status está definido em uma label)
-      - name: Get current status label
-        id: get_status
-        run: |
-          CURRENT_STATUS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${{ env.issue_number }}" | \
-            jq -r '.labels[] | select(.name | test("Todo|In Progress|Done")) | .name // empty')
-          echo "Current status: $CURRENT_STATUS"
-          echo "status=$CURRENT_STATUS" >> $GITHUB_ENV
+          if (newStatusLabel) {
+            // Obter o número da issue a partir da URL do cartão do projeto
+            const issue_number = context.payload.project_card.content_url.split('/').pop();
 
-      # Remover labels de status anteriores
-      - name: Remove previous status labels
-        uses: actions-ecosystem/action-remove-labels@v1.3.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: |
-            Todo
-            In Progress
-            Done
-          number: ${{ env.issue_number }}
-
-      # Adicionar nova label correspondente ao status atual
-      - name: Add new label based on current status
-        if: env.status != ''
-        uses: actions-ecosystem/action-add-labels@v1.1.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          labels: ${{ env.status }}
-          number: ${{ env.issue_number }}
+            // Adicionar a nova label de status à issue
+            await github.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue_number,
+              labels: [newStatusLabel]
+            });
+          }
